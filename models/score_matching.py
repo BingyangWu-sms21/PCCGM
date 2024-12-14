@@ -89,7 +89,7 @@ class DiffusionSDE(pl.LightningModule):
         loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
         
         # Residual loss
-        samples = x_perturbed  # Use perturbed samples for residual calculation
+        samples = x_perturbed + std**2 * score_pred # Use perturbed samples for residual calculation
         p = samples[:, 0, :, :] * self.residual.sigma_p + self.residual.mu_p
         k = samples[:, 1, :, :] * self.residual.sigma_k + self.residual.mu_k
         residual, _, _, _, _, _, _ = self.residual.r_diff(p, k)
