@@ -19,12 +19,12 @@ class PeriodicPoissonDiskSampler2D:
         rng (Optional[np.random.Generator]): Random number generator. If None,
             use the default random number generator.
         print_fn (Optional[Callable[[str], None]]): Function that prints debug
-            information. If None, use the default print function.
+            information. If None, do nothing.
     """
     def __init__(self, width: int, height: int, r_min: float, r_max: float,
                  r_distribution: Optional[Callable[[], float]] = None,
                  rng: Optional[np.random.Generator] = None,
-                 print_fn: Optional[Callable[[str], None]] = None):
+                 print_fn: Optional[Callable[[str], None]] = print):
         self.width = width
         self.height = height
         self.r_min = r_min
@@ -36,7 +36,7 @@ class PeriodicPoissonDiskSampler2D:
             r_distribution = lambda: self.rng.uniform(r_min, r_max)
         self.r_distribution = r_distribution
         if print_fn is None:
-            print_fn = print
+            print_fn = lambda x: None
         self.print_fn = print_fn
 
         cell_size = self.r_min * np.sqrt(2)
