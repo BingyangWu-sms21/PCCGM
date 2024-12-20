@@ -90,7 +90,7 @@ class DarcyRandom(nn.Module):
         values[indices[:, 0], indices[:, 1], indices[:, 2], indices[:, 3]] = data_batch[indices[:, 0], indices[:, 1], indices[:, 2], indices[:, 3]]
 
         return values, indices
-        
+
 class DarcyPressureDiagonal(nn.Module):
     def __init__(self,
                  sensors):
@@ -155,7 +155,7 @@ class DarcyPressureTriDiag(nn.Module):
         # main diagonal
         dim0_inds = torch.arange(dim_small)#.repeat(batch_size)
         dim1_inds = torch.arange(dim_small)#.repeat(batch_size)
-        
+
         # lower diagonal
         dim0_inds = torch.cat((dim0_inds, torch.arange(dim_small-1)))#.repeat(batch_size)
         dim1_inds = torch.cat((dim1_inds, torch.arange(dim_small-1)+1))#.repeat(batch_size)

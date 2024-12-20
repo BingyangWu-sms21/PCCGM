@@ -95,9 +95,9 @@ def main():
     print("L2-norm pressure: ", p_l2norm)
     print("L2-norm permeability: ", k_l2norm)
 
-    
-    
+
+
 
 if __name__ == "__main__":
     main()
-    
+

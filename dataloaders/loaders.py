@@ -1,4 +1,4 @@
-''' 
+'''
 Pytorch lightning dataloaders
 Author: Christian Jacobsen, University of Michigan 2023
 '''

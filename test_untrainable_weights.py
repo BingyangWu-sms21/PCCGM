@@ -17,7 +17,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    # get old parameter values 
+    # get old parameter values
     ckpt1 = torch.load(args.checkpoint1)
     ckpt2 = torch.load(args.checkpoint2)
     state_dict1 = ckpt1['state_dict']

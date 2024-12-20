@@ -255,7 +255,7 @@ class ViscousBurgers(nn.Module):
         self.dt = dt
 
     def dudt(self, u):
-        # Second order FD approximation of first derivative. 
+        # Second order FD approximation of first derivative.
         # Endpoints treated with forward/backward FD
 
         # interior points

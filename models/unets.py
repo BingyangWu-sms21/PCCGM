@@ -1,4 +1,4 @@
-''' 
+'''
 Models for noise prediction in score-matching generative models
 Author: Christian Jacobsen, University of Michigan 2023
 '''
@@ -62,7 +62,7 @@ class ResidualConvBlock(nn.Module):
             if self.same_channels:
                 out = x + x2
             else:
-                out = x1 + x2 
+                out = x1 + x2
             return out / 1.414
         else:
             x1 = self.conv1(x)
@@ -106,7 +106,7 @@ class EmbedFC(nn.Module):
     def __init__(self, input_dim, emb_dim):
         super(EmbedFC, self).__init__()
         '''
-        generic one layer FC NN for embedding things  
+        generic one layer FC NN for embedding things
         '''
         self.input_dim = input_dim
         layers = [
@@ -201,7 +201,7 @@ class UNET1(nn.Module):
         )
 
     def forward(self, x, c, t, context_mask):
-        # x is (noisy) image, c is context label, t is timestep, 
+        # x is (noisy) image, c is context label, t is timestep,
         # context_mask says which samples to block the context on
 
         #print('data shape: ', x)
@@ -219,13 +219,13 @@ class UNET1(nn.Module):
 
         # convert context to one hot embedding
         #c = nn.functional.one_hot(c, num_classes=self.n_classes).type(torch.float)
-        
+
         # mask out context if context_mask == 1
         #context_mask = context_mask[:, None]
         #context_mask = context_mask.repeat(1,self.n_classes)
         #context_mask = (-1*(1-context_mask)) # need to flip 0 <-> 1
         c = c * 0#context_mask (unconditional model dummy input)
-        
+
         # embed context, time step
         cemb1 = self.contextembed1(c).view(-1, self.n_feat * 2, 1, 1)
         temb1 = self.timeembed1(t).view(-1, self.n_feat * 2, 1, 1)

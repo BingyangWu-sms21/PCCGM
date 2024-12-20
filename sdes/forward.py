@@ -7,8 +7,8 @@ import torch
 import torch.nn as nn
 
 class VP(nn.Module):
-    def __init__(self, 
-                 beta_min=1e-4, 
+    def __init__(self,
+                 beta_min=1e-4,
                  beta_max=1.0):
         super().__init__()
 

@@ -157,7 +157,7 @@ class ImageLogger(Callback):
                 for channel in range(images[k].shape[1]):
                     all_images[k].append(images[k][:, channel].unsqueeze(1))
                 all_images[k] = torch.cat(all_images[k], dim=0)
-                
+
                 if isinstance(all_images[k], torch.Tensor):
                     all_images[k] = all_images[k].detach().cpu()
                     if self.clamp:

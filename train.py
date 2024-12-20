@@ -35,7 +35,7 @@ def main():
         raise Exception('Unknown input argument(s): ', unknown)
 
     config = OmegaConf.load(known.config)
-    
+
 
     # separate the configurations
     lightning_config = config.pop("lightning", OmegaConf.create())
@@ -46,7 +46,7 @@ def main():
     if known.name and known.resume:
         raise ValueError(
             "-n/--name and -r/--resume cannot both be specified."
-        ) 
+        )
 
     now = datetime.datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
     if known.resume:
@@ -67,7 +67,7 @@ def main():
         else:
             name = ""
         nowname = now + name
-        logdir = os.path.join(known.logdir, nowname)    
+        logdir = os.path.join(known.logdir, nowname)
 
     ckptdir = os.path.join(logdir, "checkpoints")
     cfgdir = os.path.join(logdir, "configs")
@@ -114,7 +114,7 @@ def main():
     trainer_kwargs["callbacks"].append(checkpoint_callback_1)
 
     torch.set_float32_matmul_precision('medium')
-    
+
     # set the correct gpu devices
     try:
         gpus = trainer_config.devices.split(',')

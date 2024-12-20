@@ -27,7 +27,7 @@ def main():
         model = instantiate_from_config(model_config)
         example_state_dict = model.unet.state_dict()
 
-        # get old parameter values 
+        # get old parameter values
         ckpt = torch.load(args.checkpoint)
         old_pl_state_dict = ckpt['state_dict']
         old_state_dict = {}

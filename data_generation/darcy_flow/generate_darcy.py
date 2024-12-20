@@ -91,7 +91,7 @@ def correlation_function(corr, mesh, spthresh):
     return C
 
 def random_field(args):
-    xv = np.linspace(0, 1, args.resolution) 
+    xv = np.linspace(0, 1, args.resolution)
     dx = xv[1]-xv[0]
     corr = {'c0': 0.1,
             'sigma': 1.0}
@@ -105,7 +105,7 @@ def random_field(args):
     inds = np.flip(np.argsort(ev))
     ev = ev[inds]
     U = np.real(U)[:, inds]
-    return np.diag(ev), U 
+    return np.diag(ev), U
 
 def grad_K(K, i, j, dx, dim):
     # gradient of K w.r.t. dimension at location
@@ -168,7 +168,7 @@ def form_matrix(K, xv, dx):
                 A[k, k-nx] = -2*K[i, j]/dx2
                 A[k, k-1] = -K[i, j]/dx2 + gK
                 A[k, k+1] = -K[i, j]/dx2 - gK
-        
+
         # interior
         else:
             gK1 = grad_K(K, i, j, dx, 1)/(2*dx)
@@ -186,7 +186,7 @@ def form_matrix(K, xv, dx):
             f[k, 0] = 10
         elif (np.abs(x-1+0.0625)<=0.0625) and (np.abs(y-1+0.0625)<=0.0625):
             f[k, 0] = -10
-                
+
         i += 1
     return A, f
 
@@ -289,9 +289,9 @@ def main():
     Areg = enforce_integral(xv, dx)
 
     print('Computing solutions...')
-    
+
     start_time = time.time()
-    _ = Parallel(n_jobs=args.threads)(delayed(generate_data)(i, args, UL, xv, dx, Areg) for i in range(args.resume, args.samples)) 
+    _ = Parallel(n_jobs=args.threads)(delayed(generate_data)(i, args, UL, xv, dx, Areg) for i in range(args.resume, args.samples))
     '''
     for i in range(8):
         _ = generate_data(i, args, UL, xv, dx, Areg)

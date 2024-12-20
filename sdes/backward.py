@@ -10,8 +10,8 @@ from tqdm import tqdm
 from utils import instantiate_from_config
 
 class EulerMaruyama(nn.Module):
-    def __init__(self, 
-                 num_time_steps=500, 
+    def __init__(self,
+                 num_time_steps=500,
                  eps=1e-7,
                  resample=1,
                  intermediate_steps=100000):
@@ -109,7 +109,7 @@ class EulerMaruyama(nn.Module):
 
 class ProbabilityFlowODE(EulerMaruyama):
     def __init__(self,
-                 num_time_steps=500, 
+                 num_time_steps=500,
                  eps=1e-7,
                  intermediate_steps=100000):
         super().__init__(num_time_steps, eps, intermediate_steps)
@@ -123,10 +123,10 @@ class ProbabilityFlowODE(EulerMaruyama):
 
 
 class EulerPhysics(nn.Module):
-    def __init__(self, 
+    def __init__(self,
                  residual_config,
                  residual_step_size=1e-3,
-                 num_time_steps=500, 
+                 num_time_steps=500,
                  resample=1,
                  eps=1e-7,
                  intermediate_steps=100000):
@@ -160,7 +160,7 @@ class EulerPhysics(nn.Module):
         for time_step in tqdm(time_steps, desc="Sampling", unit="iteration"):
             batch_time_step = torch.ones(batch_size, device=device) * time_step
             x, mean_x = self.predictor_step(x, c, batch_time_step, context_mask, step_size, unet, sde, device)
-            
+
             if i >= (self.num_time_steps-0):#50):
                 drdp = self.residual(x)
                 eps_step = 2e-3 / torch.amax(drdp, dim=(1,2,3))
@@ -224,7 +224,7 @@ class EulerPhysics(nn.Module):
                     if (j < (self.resample-1)) and (time_step > time_steps[-1]):
                         # simulate forward in time for one step
                         x = x + sde.f(x, batch_time_step-step_size)*step_size + sde.g(batch_time_step-step_size)*torch.sqrt(step_size)*torch.randn_like(x)
-                    
+
                     if i >= (self.num_time_steps-50):
                         drdp = self.residual(x)
                         drdp[inds[:, 0], inds[:, 1], inds[:, 2], inds[:, 3]] = 0.0
@@ -238,7 +238,7 @@ class EulerPhysics(nn.Module):
                 else:
                         # predict backward in time
                         x, mean_x = self.predictor_step(x, c, batch_time_step, context_mask, step_size, unet, sde, device)
-                        
+
                         if i >= (self.num_time_steps-50):
                             drdp = self.residual(x)
                             drdp[inds[:, 0], inds[:, 1], inds[:, 2], inds[:, 3]] = 0.0
@@ -277,7 +277,7 @@ class ProbabilityFlowODEPhysics(EulerPhysics):
     def __init__(self,
                  residual_config,
                  residual_step_size=1e-3,
-                 num_time_steps=500, 
+                 num_time_steps=500,
                  resample=1,
                  eps=1e-7,
                  intermediate_steps=100000):
@@ -298,8 +298,8 @@ class ProbabilityFlowODEPhysics(EulerPhysics):
 
 
 class PredictorCorrector(EulerMaruyama):
-    def __init__(self, 
-                 num_time_steps=500, 
+    def __init__(self,
+                 num_time_steps=500,
                  corrector_steps=1,
                  eps=1e-7,
                  r=1e-5,

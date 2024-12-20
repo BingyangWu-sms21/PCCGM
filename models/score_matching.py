@@ -62,9 +62,9 @@ class DiffusionSDE(pl.LightningModule):
     def q_sample(self, x0, t):
         # sample from the SDE at time t (assume Gaussian)
         return self.sde.forward(x0, t)
-    
 
-    
+
+
 
 
 
@@ -87,7 +87,7 @@ class DiffusionSDE(pl.LightningModule):
         loss_vlb = lamb*score_loss
         loss_vlb = loss_vlb.mean()
         loss_dict.update({f'{log_prefix}/loss_vlb': loss_vlb})
-        
+
         # Residual loss
         samples = x_perturbed + std**2 * score_pred # Use perturbed samples for residual calculation
         p = samples[:, 0, :, :] * self.residual.sigma_p + self.residual.mu_p
@@ -96,7 +96,7 @@ class DiffusionSDE(pl.LightningModule):
 
         residual_loss = torch.mean(residual ** 2)
         loss_dict.update({f'{log_prefix}/loss_residual': residual_loss})
-        
+
 
 
         loss = score_loss.mean() + self.elbo_weight*loss_vlb+residual_loss*0.000001
@@ -128,8 +128,8 @@ class DiffusionSDE(pl.LightningModule):
 
     @torch.no_grad()
     def sample(self, batch_size=8, c=None):
-        return self.sampler.forward(self.unet, self.sde, 
-                                    (batch_size, self.unet.in_channels, self.unet.data_size, self.unet.data_size), 
+        return self.sampler.forward(self.unet, self.sde,
+                                    (batch_size, self.unet.in_channels, self.unet.data_size, self.unet.data_size),
                                     c=c,
                                     device=self.device)
 
@@ -159,7 +159,7 @@ class DiffusionSDE(pl.LightningModule):
         samples, intermediates = self.sample(batch_size=N, c=c)
         end_time = time.time()
         log["samples"] = samples
-        
+
         p = samples[:, 0, :, :]*self.residual.sigma_p + self.residual.mu_p
         k = samples[:, 1, :, :]*self.residual.sigma_k + self.residual.mu_k
         residual, _, _, _, _, _, _ = self.residual.r_diff(p, k)
@@ -177,7 +177,7 @@ class DiffusionSDE(pl.LightningModule):
         #         indices -> (s, 4) # defines the indices for each of the s measurements in the batch
         #                       where last dim corresponds to indices (b, c, n, n) of the data
         batch_size = values.shape[0]
-        samples = self.sampler.inpaint(self.unet, self.sde, 
+        samples = self.sampler.inpaint(self.unet, self.sde,
                                        (batch_size, self.unet.in_channels, self.unet.data_size, self.unet.data_size),
                                        values, indices, device=self.device)
         return samples

@@ -10,7 +10,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    
+
     sample_names = os.listdir(osp.join(args.path, "data"))
     param_names = os.listdir(osp.join(args.path, "params"))
     perm_names = os.listdir(osp.join(args.path, "permeability"))
