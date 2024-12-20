@@ -40,13 +40,14 @@ def parse_args():
 
 def create_output_dirs(args):
     if os.path.exists(args.output):
-        print("Output directory already exists. Generated data will not be overwritten.")
-    sub_dir = (f"domain_{args.width:.2f}x{args.height:.2f}_r_{args.r_min:.3f}-{args.r_max:.3f}"
-               f"_res_{args.resolution[0]}x{args.resolution[1]}_frac_"
+        print("Output directory already exists. Generated data will be overwritten.")
+    sub_dir = (f"domain_{args.width:.2f}x{args.height:.2f}_res_{args.resolution[0]}x{args.resolution[1]}"
+               f"_r_{args.r_min:.3f}-{args.r_max:.3f}_frac_"
                f"{args.target_area_frac_range[0]:.2f}-{args.target_area_frac_range[1]:.2f}"
-               f"_keep_last_{args.keep_last}_seed_{args.seed}"
+               f"_keep_last_{args.keep_last}"
                f"_Em_{args.properties[0]:.2f}_nu_m_{args.properties[1]:.2f}"
-               f"_Ei_{args.properties[2]:.2f}_nu_i_{args.properties[3]:.2f}")
+               f"_Ei_{args.properties[2]:.2f}_nu_i_{args.properties[3]:.2f}"
+               f"_seed_{args.seed}")
     os.makedirs(args.output, exist_ok=True)
     out_dir = os.path.join(args.output, sub_dir)
     os.makedirs(os.path.join(out_dir, "rves"), exist_ok=True)
@@ -58,13 +59,10 @@ def create_output_dirs(args):
 def compute_effective_properties(i, out_dir, properties, solver):
     rve_filename = os.path.join(out_dir, "rves", f"rve_{i}.npy")
     moduli_filename = os.path.join(out_dir, "moduli", f"moduli_{i}.npy")
-    if os.path.exists(moduli_filename):
-        # Skip if the effective properties are already computed
-        return
     if not os.path.exists(rve_filename):
         raise ValueError(f"RVE file {rve_filename} does not exist.")
     rve = np.load(rve_filename)
-    rve = torch.tensor(rve, dtype=torch.float32)
+    rve = torch.tensor(rve, dtype=torch.float64, requires_grad=True)
     lmbda_m = properties[0] * properties[1] / ((1. + properties[1]) * (1. - 2. * properties[1]))
     mu_m = properties[0] / (2. * (1. + properties[1]))
     lmbda_i = properties[2] * properties[3] / ((1. + properties[3]) * (1. - 2. * properties[3]))
@@ -73,18 +71,25 @@ def compute_effective_properties(i, out_dir, properties, solver):
     lmbda = lmbda.unsqueeze(0)
     mu = (1. - rve) * mu_m + rve * mu_i
     mu = mu.unsqueeze(0)
-    _, moduli = solver.run_and_process(lmbda, mu)
-    np.save(moduli_filename, moduli)
+    try:
+        _, moduli = solver.run_and_process(lmbda, mu)
+    except Exception as e:
+        print(f"Failed to compute effective properties for RVE {i}. Error: {e}")
+    np.save(moduli_filename, moduli.detach().numpy())
 
 
 def main():
     args = parse_args()
     out_dir = create_output_dirs(args)
+    start_time = time.time()
     print(f"Output directory: {out_dir}")
-    print("Generating RVEs by Poisson disk sampling...")
     rng = np.random.default_rng(seed=args.seed)
     sampler = PeriodicPoissonDiskSampler2D(
         args.width, args.height, args.r_min, args.r_max, rng=rng, print_fn=None)
+    solver = PeriodicBCRVE2D(
+        corner=(args.width, args.height),
+        n_cells=args.resolution,
+        global_strain_list = [(1., 0., 0.), (0., 1., 0.), (0., 0., 1.)])
     current_samples = 0
     current_trails = 0
     while current_samples < args.samples:
@@ -96,39 +101,29 @@ def main():
                 plt.imshow(bitmap, cmap="gray")
                 plt.axis("off")
                 img_filename = os.path.join(out_dir, "imgs", f"rve_{current_samples}.png")
-                if not os.path.exists(img_filename):
-                    plt.savefig(img_filename, bbox_inches="tight", pad_inches=0)
+                plt.savefig(img_filename, bbox_inches="tight", pad_inches=0)
                 plt.close()
             npy_filename = os.path.join(out_dir, "rves", f"rve_{current_samples}.npy")
-            if not os.path.exists(npy_filename):
-                np.save(npy_filename, bitmap)
-            current_samples += 1
-            if current_samples % (args.samples // 10) == 0:
-                print(f"Generated {current_samples} / {args.samples} samples")
+            np.save(npy_filename, bitmap)
+            try:
+                compute_effective_properties(current_samples, out_dir, args.properties, solver)
+                current_samples += 1
+                if current_samples % max(10, (args.samples // 100)) == 0:
+                    print(f"Generated {current_samples} / {args.samples} samples")
+            except Exception as e:
+                print(f"Failed to compute effective properties for RVE {current_samples}. Error: {e}")
         current_trails += 1
-        if current_trails % (args.samples // 5) == 0:
+        if current_trails % max(20, (args.samples // 50)) == 0:
             print(f"Generated {current_samples} / {args.samples} samples after "
                   f"{current_trails} trails")
 
         if current_trails > 10 * args.samples:
             raise ValueError("Failed to generate enough samples. The success rate "
-                             "of the Poisson disk sampler is too low. Please adjust "
-                             "the parameters.")
-
-    print("Finished generating RVEs.")
-    print("Computing effective properties...")
-    start_time = time.time()
-    solver = PeriodicBCRVE2D(
-        corner=(args.width, args.height),
-        n_cells=args.resolution,
-        global_strain_list = [(1., 0., 0.), (0., 1., 0.), (0., 0., 1.)])
-    for i in range(args.samples):
-        compute_effective_properties(i, out_dir, args.properties, solver)
-        if i % (args.samples // 10) == 0:
-            print(f"Computed effective properties for {i} / {args.samples} samples")
+                             "of the Poisson disk sampler and FEM solver is too low. "
+                             "Please adjust the parameters.")
 
     end_time = time.time()
-    print(f"Finished computing effective properties in {end_time - start_time:.2f} seconds.")
+    print(f"Finished generation in {end_time - start_time:.2f} seconds.")
 
 
 if __name__ == "__main__":

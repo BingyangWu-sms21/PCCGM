@@ -279,10 +279,10 @@ def main():
     global_strain_list = [(1., 0., 0.), (0., 1., 0.), (0., 0., 1.)]
     solver = PeriodicBCRVE2D(
         corner=corner, n_cells=n_cells, global_strain_list=global_strain_list)
-    E_matrix = 1.0
-    nu_matrix = 0.
-    E_inclusion = 2.0
-    nu_inclusion = 0.
+    E_matrix = 71.0
+    nu_matrix = 0.33
+    E_inclusion = 400.0
+    nu_inclusion = 0.25
     lmbda_matrix = E_matrix * nu_matrix / ((1.0 + nu_matrix) * (1.0 - 2.0 * nu_matrix))
     mu_matrix = E_matrix / (2.0 * (1.0 + nu_matrix))
     lmbda_inclusion = E_inclusion * nu_inclusion / ((1.0 + nu_inclusion) * (1.0 - 2.0 * nu_inclusion))
