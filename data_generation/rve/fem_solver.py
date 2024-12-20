@@ -61,7 +61,6 @@ class PeriodicBCRVE2D(torch_fenics.FEniCSModule):
                  n_cells: Tuple[int, int],
                  global_strain_list: List[Tuple[float, float, float]],
                  sol_vec_elem: Optional[VectorElement] = None,
-                 prop_fem: Optional[FiniteElement] = None
                  ):
         super().__init__()
 
@@ -73,16 +72,13 @@ class PeriodicBCRVE2D(torch_fenics.FEniCSModule):
         self.n_cells = n_cells
         self.mesh = RectangleMesh(Point(0.0, 0.0), Point(*corner), *n_cells)
         if sol_vec_elem is None:
-            Ve = VectorElement("Lagrange", self.mesh.ufl_cell(), 2)
+            Ve = VectorElement("Lagrange", self.mesh.ufl_cell(), 1)
         else:
             Ve = sol_vec_elem
 
         Re = VectorElement("R", self.mesh.ufl_cell(), 0)
 
-        if prop_fem is None:
-            Fe = FiniteElement("Lagrange", self.mesh.ufl_cell(), 1)
-        else:
-            Fe = prop_fem
+        Fe = FiniteElement("Lagrange", self.mesh.ufl_cell(), 1)
 
         self.V = FunctionSpace(self.mesh, MixedElement([Ve, Re]),
                                constrained_domain=
@@ -94,6 +90,14 @@ class PeriodicBCRVE2D(torch_fenics.FEniCSModule):
                                PeriodicBoundary2D(corner, 1e-10))
         self.U = FunctionSpace(self.mesh, Ve, constrained_domain=
                                PeriodicBoundary2D(corner, 1e-10))
+
+        # map index of spatial coordinates to dof index of W
+        prop_dof_coordinates = self.W.tabulate_dof_coordinates()
+        # dof index to spatial coordinate index
+        prop_sorted_index = np.lexsort((prop_dof_coordinates[:, 1], prop_dof_coordinates[:, 0]))
+        # get the inverse mapping
+        prop_inverse_index = np.argsort(prop_sorted_index)
+        self.prop_inverse_index = torch.tensor(prop_inverse_index)
 
         # construct a function to identify component of dof (x or y or scalar)
         vec_comp = Function(self.U)
@@ -212,6 +216,15 @@ class PeriodicBCRVE2D(torch_fenics.FEniCSModule):
                 Shape (n_batch, n_global_strains, 3).
         """
         n_cases = len(self.global_strain_list)
+        if lmbda_tensor.dim() != 3 or mu_tensor.dim() != 3:
+            raise ValueError("lmbda_tensor and mu_tensor must have shape (n_batch, n_cells[0], n_cells[1])")
+        if lmbda_tensor.shape != mu_tensor.shape:
+            raise ValueError("lmbda_tensor and mu_tensor must have the same shape")
+        n_batch = lmbda_tensor.shape[0]
+        lmbda_tensor = lmbda_tensor.reshape(n_batch, -1)
+        lmbda_tensor = lmbda_tensor[:, self.prop_inverse_index]
+        mu_tensor = mu_tensor.reshape(n_batch, -1)
+        mu_tensor = mu_tensor[:, self.prop_inverse_index]
         results = self(lmbda_tensor, mu_tensor)
         u_sol_list = results[:n_cases]
         avg_stress_list = results[n_cases:]
@@ -282,7 +295,7 @@ def main():
     # plot the label field
     plt.imshow(label_field, origin="lower")
     plt.savefig("label_field.png")
-    label_field_tensor = torch.tensor(label_field, dtype=torch.float64, requires_grad=True).reshape(1, -1)
+    label_field_tensor = torch.tensor(label_field, dtype=torch.float64, requires_grad=True).unsqueeze(0)
     lmbda = lmbda_matrix * (1.0 - label_field_tensor) + lmbda_inclusion * label_field_tensor
     mu = mu_matrix * (1.0 - label_field_tensor) + mu_inclusion * label_field_tensor
     u_sol, avg_stress = solver.run_and_process(lmbda, mu)
