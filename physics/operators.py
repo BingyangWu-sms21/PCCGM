@@ -287,10 +287,15 @@ class ViscousBurgers(nn.Module):
 
 
 class RVE(nn.Module):
-    def __init__(self, properties, corner, n_cells):
+    def __init__(self, properties, corner, n_cells, reg_weight=None):
         super().__init__()
         if len(properties) != 4:
             raise ValueError("Properties must be a list of length 4")
+        if reg_weight is None:
+            reg_weight = [1., 1.]
+        if len(reg_weight) != 2:
+            raise ValueError("Regularization weights must be a list of length 2")
+        self.reg_weight = reg_weight
         Em, nu_m, Ei, nu_i = properties
         self.lmbda_m = Em * nu_m / ((1. + nu_m) * (1. - 2. * nu_m))
         self.mu_m = Em / (2. * (1. + nu_m))
@@ -327,3 +332,21 @@ class RVE(nn.Module):
         moduli = moduli.reshape(-1, 9)
         error = moduli - moduli_gt
         return error
+
+    def regularize(self, x):
+        r"""Compute the regularization term for samples x
+
+        Args:
+            x (torch.Tensor): The RVE field. Shape (b, 1, *n_cells)
+
+        Returns:
+            torch.Tensor: The regularization term. Shape (b)
+        """
+        # reshape x to (b, *n_cells)
+        x = x.squeeze(1)
+        # periodic TV (Total Variation) regularization
+        periodic_tv = torch.sum(torch.abs(x - torch.roll(x, 1, 1)), dim=(1, 2)) + \
+                      torch.sum(torch.abs(x - torch.roll(x, 1, 2)), dim=(1, 2))
+        # constrain the values to be either 0 or 1
+        binary_loss = torch.mean(torch.abs(x * (1. - x)), dim=(1, 2))
+        return self.reg_weight[0] * periodic_tv + self.reg_weight[1] * binary_loss

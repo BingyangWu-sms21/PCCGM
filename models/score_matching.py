@@ -200,6 +200,7 @@ class DiffusionSDERVE(pl.LightningModule):
                  eps=1e-5,
                  elbo_weight=0.,
                  residual_enable=False,
+                 regularize_enable=False,
                  residual_weight=1.e-4,
                  log_every_t=50,
                  lr=1e-4,
@@ -222,6 +223,7 @@ class DiffusionSDERVE(pl.LightningModule):
         self.milestones = milestones
         self.gamma = gamma
         self.elbo_weight = elbo_weight
+        self.regularize_enable = regularize_enable
         self.residual_enable = residual_enable
         self.residual_weight = residual_weight
         self.log_every_t = log_every_t
@@ -246,7 +248,7 @@ class DiffusionSDERVE(pl.LightningModule):
         log_prefix = 'train' if self.training else 'val'
 
         # score-mathcing objective function
-        score_loss = torch.sum((score_pred*std + z)**2, dim=(1,2,3))
+        score_loss = torch.mean((score_pred*std + z)**2, dim=(1,2,3))
 
         loss_dict.update({f'{log_prefix}/loss_score': score_loss.mean()})
 
@@ -257,14 +259,18 @@ class DiffusionSDERVE(pl.LightningModule):
         # Residual loss
         samples = x_perturbed + std**2 * score_pred # Use perturbed samples for residual calculation
         if self.residual_enable:
-            residual = self.residual(samples, c_raw)
+            residual = self.residual(samples, c_raw)  # Shape: (b, 9)
         else:
-            residual = torch.zeros_like(c_raw)
+            residual = torch.zeros_like(c_raw)  # Shape: (b, 9)
 
-        residual_loss = torch.sum(residual**2, dim=1)
+        residual_loss = torch.mean(residual**2, dim=1)  # Shape: (b,)
         loss_dict.update({f'{log_prefix}/loss_residual': residual_loss.mean()})
 
         loss = score_loss + self.elbo_weight * loss_vlb + residual_loss * self.residual_weight / (2. * std.reshape(-1))
+        reg_loss = self.residual.regularize(samples)
+        loss_dict.update({f'{log_prefix}/loss_reg': reg_loss.mean()})
+        if self.regularize_enable:
+            loss += reg_loss
         loss = loss.mean()
 
         loss_dict.update({f'{log_prefix}/loss': loss})
@@ -326,7 +332,6 @@ class DiffusionSDERVE(pl.LightningModule):
         log["samples"] = samples
 
         residual = self.residual(samples, c_raw)
-        print(residual)
 
         self.log("physics_residual_l2_norm", torch.mean(residual**2),
                  prog_bar=True, logger=True, on_step=False, on_epoch=True)
