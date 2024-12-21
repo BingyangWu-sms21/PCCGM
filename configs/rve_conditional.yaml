@@ -6,6 +6,8 @@ model:
     scheduler_type: "none"  # ["cos", "cos-warm", "mstep", "exp", "none"]
     milestones: [30, 80]  # only for mstep
     gamma: 0.5  # decay factor for mstep and exp
+    residual_enable: True
+    residual_weight: 0.1
     unet_config:
       target: models.unets.UNET1
       params:

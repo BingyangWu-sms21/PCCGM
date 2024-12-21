@@ -314,7 +314,16 @@ class RVE(nn.Module):
         x = x.squeeze(1)
         lmbda = (1. - x) * self.lmbda_m + x * self.lmbda_i
         mu = (1. - x) * self.mu_m + x * self.mu_i
-        _, moduli = self.solver.run_and_process(lmbda, mu)
+        lmbda = lmbda.cpu().double()
+        mu = mu.cpu().double()
+        # _, moduli = self.solver.run_and_process(lmbda.cpu().double(), mu.cpu().double())
+        moduli = torch.zeros(moduli_gt.shape[0], 3, 3, device=moduli_gt.device, dtype=moduli_gt.dtype)
+        # solve sample by sample
+        for i in range(lmbda.shape[0]):
+            try:
+                _, moduli[i] = self.solver.run_and_process(lmbda[i].unsqueeze(0), mu[i].unsqueeze(0))
+            except Exception as e:
+                print("Error in RVE forward: ", e)
         moduli = moduli.reshape(-1, 9)
         error = moduli - moduli_gt
         return error

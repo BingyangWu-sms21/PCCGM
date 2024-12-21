@@ -257,11 +257,7 @@ class DiffusionSDERVE(pl.LightningModule):
         # Residual loss
         samples = x_perturbed + std**2 * score_pred # Use perturbed samples for residual calculation
         if self.residual_enable:
-            try:
-                residual = self.residual(samples, c_raw)
-            except:
-                # failed to compute residual
-                residual = torch.zeros_like(c_raw)
+            residual = self.residual(samples, c_raw)
         else:
             residual = torch.zeros_like(c_raw)
 
@@ -330,6 +326,7 @@ class DiffusionSDERVE(pl.LightningModule):
         log["samples"] = samples
 
         residual = self.residual(samples, c_raw)
+        print(residual)
 
         self.log("physics_residual_l2_norm", torch.mean(residual**2),
                  prog_bar=True, logger=True, on_step=False, on_epoch=True)
