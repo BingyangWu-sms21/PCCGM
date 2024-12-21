@@ -138,9 +138,9 @@ class CondVec2Img(nn.Module):
         self.conv1 = nn.Conv2d(1, channels, 3, padding=1)
 
     def forward(self, x):
-        print(f"Shape before fc1: {x.shape}")  # 打印 fc1 之前的形状
+        # print(f"Shape before fc1: {x.shape}")  # 打印 fc1 之前的形状
         x = self.act(self.fc1(x))  # Apply activation to first layer
-        print(f"Shape after fc1: {x.shape}")  # 打印 fc1 之后的形状
+        # print(f"Shape after fc1: {x.shape}")  # 打印 fc1 之后的形状
 
         x = self.act(self.fc2(x))
         x = self.fc3(x)
@@ -244,8 +244,8 @@ class UNET1(nn.Module):
         else:
             up1 = self.up0(hiddenvec)
             # up2 = self.up1(up1, down2) # if want to avoid add and multiply embeddings
-            up2 = self.up1(cemb1*up1+ temb1, down2)  # add and multiply embeddings
-            up3 = self.up2(cemb2*up2+ temb2, down1)
+            up2 = self.up1(cemb1*up1 + temb1, down2)  # add and multiply embeddings
+            up3 = self.up2(cemb2*up2 + temb2, down1)
             out = self.out(torch.cat((up3, initconv), 1))
         return out
 

@@ -1,16 +1,15 @@
-name: PCCGM
+name: PCCGM2
 channels:
   - conda-forge
   - defaults
 dependencies:
-  - python
+  - python=3.11
   - numpy
   - scipy
+  - fenics
   - matplotlib
   - joblib
   - tqdm
-  - torch
-  - torchvision
   - pytorch-lightning
   - Pillow
   - omegaconf

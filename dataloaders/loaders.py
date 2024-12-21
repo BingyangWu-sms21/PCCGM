@@ -87,6 +87,7 @@ class Darcy_Dataset(Dataset):
 
         return Data, W
 
+
 class DarcyLoader(pl.LightningDataModule):
     def __init__(self, data_dir, batch_size=32, num_workers=8):
         super().__init__()
@@ -122,6 +123,7 @@ class Burgers_Dataset(Dataset):
 
         return Data, W
 
+
 class BurgersLoader(pl.LightningDataModule):
     def __init__(self, data_dir, batch_size=32, num_workers=8):
         super().__init__()
@@ -135,3 +137,75 @@ class BurgersLoader(pl.LightningDataModule):
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers)
 
+
+class RVEDataset(Dataset):
+    def __init__(self, path, idx_list, moduli_mean, moduli_std):
+        self.root = path
+        self.idx_list = idx_list
+        self.moduli_mean = moduli_mean
+        self.moduli_std = moduli_std
+
+    def __len__(self):
+        return len(self.idx_list)
+
+    def __getitem__(self, idx):
+        rve = torch.from_numpy(
+            np.load(osp.join(self.root, "rves", f"rve_{self.idx_list[idx]}.npy"))).float()
+        rve = rve.unsqueeze(0)  # shape (1, 64, 64)
+        moduli_raw = np.load(osp.join(self.root, "moduli", f"moduli_{self.idx_list[idx]}.npy"))
+        moduli_raw = moduli_raw.reshape(-1)
+        moduli = (moduli_raw - self.moduli_mean) / self.moduli_std  # shape (9,)
+        moduli = torch.from_numpy(moduli).float()
+        moduli_raw = torch.from_numpy(moduli_raw).float()
+
+        return rve, moduli, moduli_raw
+
+
+class RVELoader(pl.LightningDataModule):
+    def __init__(self, data_dir, total_samples, train_samples, val_samples=0,
+                 test_samples=0, batch_size=32, num_workers=8):
+        super().__init__()
+        self.data_dir = data_dir
+        self.total_samples = total_samples
+        self.train_samples = train_samples
+        self.val_samples = val_samples
+        self.test_samples = test_samples
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.moduli_mean, self.moduli_std = self._compute_moduli_mean_std()
+
+    def setup(self, stage: str):
+        if stage == "fit":
+            self.train_dataset = RVEDataset(self.data_dir, list(range(self.train_samples)),
+                                            self.moduli_mean, self.moduli_std)
+            self.val_dataset = RVEDataset(
+                self.data_dir, list(range(self.train_samples, self.train_samples + self.val_samples)),
+                self.moduli_mean, self.moduli_std)
+        elif stage == "test":
+            self.test_dataset = RVEDataset(
+                self.data_dir, list(range(self.total_samples - self.test_samples,
+                                          self.total_samples)),
+                self.moduli_mean, self.moduli_std)
+
+    def train_dataloader(self):
+        return DataLoader(self.train_dataset, batch_size=self.batch_size,
+                          num_workers=self.num_workers, shuffle=True)
+
+    def val_dataloader(self):
+        return DataLoader(self.val_dataset, batch_size=self.batch_size,
+                          num_workers=self.num_workers, shuffle=False)
+
+    def test_dataloader(self):
+        return DataLoader(self.test_dataset, batch_size=self.batch_size,
+                          num_workers=self.num_workers, shuffle=False)
+
+    def _compute_moduli_mean_std(self):
+        r"""Go through the dataset and compute the mean and std of the moduli"""
+        moduli = []
+        for idx in range(self.total_samples):
+            moduli.append(np.load(osp.join(self.data_dir, "moduli", f"moduli_{idx}.npy")))
+        moduli = np.array(moduli)
+        moduli_mean = np.mean(moduli, axis=0).reshape(-1)  # shape (3, 3) -> (9,)
+        moduli_std = np.std(moduli, axis=0).reshape(-1)  # shape (3, 3) -> (9,)
+
+        return moduli_mean, moduli_std

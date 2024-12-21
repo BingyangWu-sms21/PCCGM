@@ -6,6 +6,8 @@
 *old_code
 output*
 *.pth
+*.slurm
+slurm_logs*
 logs*/
 **/__pycache__
 **/.ipynb_checkpoints

@@ -7,6 +7,7 @@ Author: Christian Jacobsen, University of Michigan 2023
 import torch
 import torch.nn as nn
 import numpy as np
+from data_generation.rve.fem_solver import PeriodicBCRVE2D
 
 class DarcyFlow(nn.Module):
     def __init__(self, dx, eps, mu_p, sigma_p, mu_k, sigma_k):
@@ -283,3 +284,37 @@ class ViscousBurgers(nn.Module):
     def forward(self, u):
         # data u is of shape (b, 1, n, n) corresponding to (batch, u channel, x coord, t coord)
         return self.sigma*self.dudt(u) + (self.sigma*u+self.mu)*self.sigma*self.dudx(u) - self.sigma*self.nu*self.d2udx2(u)
+
+
+class RVE(nn.Module):
+    def __init__(self, properties, corner, n_cells):
+        super().__init__()
+        if len(properties) != 4:
+            raise ValueError("Properties must be a list of length 4")
+        Em, nu_m, Ei, nu_i = properties
+        self.lmbda_m = Em * nu_m / ((1. + nu_m) * (1. - 2. * nu_m))
+        self.mu_m = Em / (2. * (1. + nu_m))
+        self.lmbda_i = Ei * nu_i / ((1. + nu_i) * (1. - 2. * nu_i))
+        self.mu_i = Ei / (2. * (1. + nu_i))
+        global_strain_list = [(1., 0., 0.), (0., 1., 0.), (0., 0., 1.)]
+        self.solver = PeriodicBCRVE2D(
+            corner=corner, n_cells=n_cells, global_strain_list=global_strain_list)
+
+    def forward(self, x, moduli_gt):
+        r"""Compute the residual of the RVE problem
+
+        Args:
+            x (torch.Tensor): The RVE field. Shape (b, 1, *n_cells)
+            moduli_gt (torch.Tensor): The ground truth moduli. Shape (b, 9)
+
+        Returns:
+            torch.Tensor: The residual. Shape (b, 9)
+        """
+        # reshape x to (b, *n_cells)
+        x = x.squeeze(1)
+        lmbda = (1. - x) * self.lmbda_m + x * self.lmbda_i
+        mu = (1. - x) * self.mu_m + x * self.mu_i
+        _, moduli = self.solver.run_and_process(lmbda, mu)
+        moduli = moduli.reshape(-1, 9)
+        error = moduli - moduli_gt
+        return error

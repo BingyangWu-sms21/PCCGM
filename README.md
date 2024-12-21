@@ -4,23 +4,8 @@
 See the list of dependencies in `environment.yml`
 Install to a new conda environement called `PCCGM` using `conda env create -f environment.yml`. Activate the environment using `conda activate PCCGM`
 
-## Install GPU Support for PyTorch (Optional)
-If your machine has an NVIDIA GPU and you want to use GPU acceleration with PyTorch, ensure that you install a GPU-compatible version of PyTorch. Depending on your CUDA version, follow these steps:
-
-1. **Check your CUDA version**:
-   Run the following command to verify your CUDA version:
-   ```bash
-   nvidia-smi
-   ```
-   You will see the CUDA version (e.g., `11.8`) displayed in the output.
-
-2. **Install GPU-compatible PyTorch**:
-   Replace the default CPU-only PyTorch in the Conda environment with a GPU-enabled version. Use the appropriate CUDA version from the [PyTorch Get Started page](https://pytorch.org/get-started/locally/).
-
-   Example for CUDA 11.8:
-   ```bash
-   conda install pytorch torchvision pytorch-cuda=11.8 -c pytorch -c nvidia
-   ```
+## Install PyTorch
+The `environment.yml` does not include pytorch. See [PyTorch Get Started page](https://pytorch.org/get-started/locally/).
 
 ## Install torch-fenics (Optional)
 To generate data or run experiments of 2D Representative Volume Element (2D-RVE), additional torch-fenics package need to be installed from the [torch-fenics repository](https://github.com/barkm/torch-fenics).
