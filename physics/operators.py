@@ -287,21 +287,17 @@ class ViscousBurgers(nn.Module):
 
 
 class RVE(nn.Module):
-    def __init__(self, properties, corner, n_cells, reg_weight=None):
+    def __init__(self, properties, corner, n_cells, fourier=False):
         super().__init__()
         if len(properties) != 4:
             raise ValueError("Properties must be a list of length 4")
-        if reg_weight is None:
-            reg_weight = [1., 1.]
-        if len(reg_weight) != 2:
-            raise ValueError("Regularization weights must be a list of length 2")
-        self.reg_weight = reg_weight
         Em, nu_m, Ei, nu_i = properties
         self.lmbda_m = Em * nu_m / ((1. + nu_m) * (1. - 2. * nu_m))
         self.mu_m = Em / (2. * (1. + nu_m))
         self.lmbda_i = Ei * nu_i / ((1. + nu_i) * (1. - 2. * nu_i))
         self.mu_i = Ei / (2. * (1. + nu_i))
         global_strain_list = [(1., 0., 0.), (0., 1., 0.), (0., 0., 1.)]
+        self.fourier = fourier
         self.solver = PeriodicBCRVE2D(
             corner=corner, n_cells=n_cells, global_strain_list=global_strain_list)
 
@@ -309,14 +305,20 @@ class RVE(nn.Module):
         r"""Compute the residual of the RVE problem
 
         Args:
-            x (torch.Tensor): The RVE field. Shape (b, 1, *n_cells)
+            x (torch.Tensor): The RVE field. Shape (b, 1, *n_cells) if fourier=False,
+                (b, 2, *n_cells) if fourier=True
             moduli_gt (torch.Tensor): The ground truth moduli. Shape (b, 9)
 
         Returns:
             torch.Tensor: The residual. Shape (b, 9)
         """
         # reshape x to (b, *n_cells)
-        x = x.squeeze(1)
+        if self.fourier:
+            # compute the inverse Fourier transform
+            x_complex = x[:, 0] + 1j * x[:, 1]
+            x = torch.fft.ifft(x_complex).real
+        else:
+            x = x.squeeze(1)
         lmbda = (1. - x) * self.lmbda_m + x * self.lmbda_i
         mu = (1. - x) * self.mu_m + x * self.mu_i
         lmbda = lmbda.cpu().double()
@@ -333,7 +335,18 @@ class RVE(nn.Module):
         error = moduli - moduli_gt
         return error
 
-    def regularize(self, x):
+
+class Regularizer(nn.Module):
+    def __init__(self, weight=None, fourier=False):
+        super().__init__()
+        if weight is None:
+            weight = [0., 0., 0.]
+        if len(weight) != 3:
+            raise ValueError("Regularization weights must be a list of length 2")
+        self.reg_weight = weight
+        self.fourier = fourier
+
+    def forward(self, x):
         r"""Compute the regularization term for samples x
 
         Args:
@@ -343,10 +356,19 @@ class RVE(nn.Module):
             torch.Tensor: The regularization term. Shape (b)
         """
         # reshape x to (b, *n_cells)
-        x = x.squeeze(1)
+        if self.fourier:
+            # compute the inverse Fourier transform
+            x_complex = x[:, 0] + 1j * x[:, 1]
+            x = torch.fft.ifft(x_complex).real
+        else:
+            x = x.squeeze(1)
         # periodic TV (Total Variation) regularization
         periodic_tv = torch.sum(torch.abs(x - torch.roll(x, 1, 1)), dim=(1, 2)) + \
                       torch.sum(torch.abs(x - torch.roll(x, 1, 2)), dim=(1, 2))
         # constrain the values to be either 0 or 1
         binary_loss = torch.mean(torch.abs(x * (1. - x)), dim=(1, 2))
-        return self.reg_weight[0] * periodic_tv + self.reg_weight[1] * binary_loss
+        # periodic contraint
+        periodic_loss = torch.mean(torch.abs(x[:, 0, :] - x[:, -1, :]), dim=1) + \
+                        torch.mean(torch.abs(x[:, :, 0] - x[:, :, -1]), dim=1)
+        return self.reg_weight[0] * periodic_tv + self.reg_weight[1] * binary_loss + \
+            self.reg_weight[2] * periodic_loss

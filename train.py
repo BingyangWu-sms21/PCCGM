@@ -128,6 +128,7 @@ def main():
                       strategy=trainer_config.strategy,
                       devices=len(gpus),
                       precision=trainer_config.precision,
+                      gradient_clip_val=trainer_config.get("gradient_clip_val", 0),
                       default_root_dir=logdir,
                       **trainer_kwargs)
 
@@ -135,8 +136,16 @@ def main():
 
     # load unet weights?
     if known.unet_weights is not None:
-        print('Loading unet model weights from .pth file.')
-        model.unet.load_state_dict(torch.load(known.unet_weights))
+        if known.unet_weights.endswith('.pth'):
+            print('Loading unet model weights from .pth file.')
+            model.unet.load_state_dict(torch.load(known.unet_weights))
+        elif known.unet_weights.endswith('.ckpt'):
+            print('Loading unet model weights from .ckpt file of full model.')
+            checkpoint = torch.load(known.unet_weights)
+            model_state_dict = checkpoint['state_dict']
+            unet_state_dict = {
+                k.split('.', 1)[1]: v for k, v in model_state_dict.items() if k.startswith('unet.')}
+            model.unet.load_state_dict(unet_state_dict, strict=False)
 
     # lock the base model?
     if lightning_config.lock_base:

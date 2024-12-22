@@ -197,11 +197,14 @@ class DiffusionSDERVE(pl.LightningModule):
                  sde_config,
                  sampler_config,
                  residual_config,
+                 regularize_config,
                  eps=1e-5,
                  elbo_weight=0.,
+                 fourier=False,
                  residual_enable=False,
                  regularize_enable=False,
                  residual_weight=1.e-4,
+                 regularize_weight=1.e-4,
                  log_every_t=50,
                  lr=1e-4,
                  optimizer_type='adamw',
@@ -215,7 +218,14 @@ class DiffusionSDERVE(pl.LightningModule):
         self.unet = instantiate_from_config(unet_config)
         self.sde = instantiate_from_config(sde_config)
         self.sampler = instantiate_from_config(sampler_config)
+        # set residual_config.params.fourier and regularize_config.params.fourier
+        # to the same value as fourier
+        residual_config.params.fourier = fourier
+        regularize_config.params.fourier = fourier
+        print(residual_config)
+        print(regularize_config)
         self.residual = instantiate_from_config(residual_config)
+        self.regularize = instantiate_from_config(regularize_config)
         self.eps = eps
         self.lr = lr
         self.optimizer_type = optimizer_type.lower()
@@ -224,6 +234,7 @@ class DiffusionSDERVE(pl.LightningModule):
         self.gamma = gamma
         self.elbo_weight = elbo_weight
         self.regularize_enable = regularize_enable
+        self.regularize_weight = regularize_weight
         self.residual_enable = residual_enable
         self.residual_weight = residual_weight
         self.log_every_t = log_every_t
@@ -267,10 +278,10 @@ class DiffusionSDERVE(pl.LightningModule):
         loss_dict.update({f'{log_prefix}/loss_residual': residual_loss.mean()})
 
         loss = score_loss + self.elbo_weight * loss_vlb + residual_loss * self.residual_weight / (2. * std.reshape(-1))
-        reg_loss = self.residual.regularize(samples)
+        reg_loss = self.regularize(samples)
         loss_dict.update({f'{log_prefix}/loss_reg': reg_loss.mean()})
         if self.regularize_enable:
-            loss += reg_loss
+            loss += reg_loss * self.regularize_weight / (2. * std.reshape(-1))
         loss = loss.mean()
 
         loss_dict.update({f'{log_prefix}/loss': loss})

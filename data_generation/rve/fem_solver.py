@@ -181,21 +181,21 @@ class PeriodicBCRVE2D(torch_fenics.FEniCSModule):
         a, L = lhs(F), rhs(F)
         a += dot(alpha, v) * dx + dot(beta, u) * dx
 
-        u_sol_list = []
+        w_sol_list = []
         avg_stress_list = []
         for global_strain in self.global_strain_list:
             assign_global_strain(Eps, global_strain)
             w_sol = Function(self.V)
             solve(a == L, w_sol, [], solver_parameters={"linear_solver": "cg"})
             u_sol, _ = w_sol.split()
-            u_sol_list.append(u_sol)
+            w_sol_list.append(w_sol)
             sigma_sol = sigma(u_sol, Eps)
             avg_stress = [assemble(sigma_sol[0, 0] * dx) / self.vol,
                           assemble(sigma_sol[1, 1] * dx) / self.vol,
                           assemble(sigma_sol[0, 1] * dx) / self.vol]
             avg_stress_list.extend(avg_stress)
 
-        return tuple(u_sol_list) + tuple(avg_stress_list)
+        return tuple(w_sol_list) + tuple(avg_stress_list)
 
     def run_and_process(self,
                         lmbda_tensor: torch.Tensor,
@@ -226,10 +226,10 @@ class PeriodicBCRVE2D(torch_fenics.FEniCSModule):
         mu_tensor = mu_tensor.reshape(n_batch, -1)
         mu_tensor = mu_tensor[:, self.prop_inverse_index]
         results = self(lmbda_tensor, mu_tensor)
-        u_sol_list = results[:n_cases]
+        w_sol_list = results[:n_cases]
         avg_stress_list = results[n_cases:]
         # Shape: n_cases number of (n_batch, n_dofs, 2) -> (n_batch, n_cases, n_x, n_y, 2)
-        u_sol_tensor = torch.stack([self.get_2d_tensor(u_sol) for u_sol in u_sol_list], dim=1)
+        u_sol_tensor = torch.stack([self.get_2d_tensor(w_sol) for w_sol in w_sol_list], dim=1)
         # Shape: n_cases * 3 number of (n_batch) -> (n_batch, n_cases, 3)
         avg_stress_tensor = torch.stack(avg_stress_list, dim=1).reshape(-1, n_cases, 3)
         return u_sol_tensor, avg_stress_tensor

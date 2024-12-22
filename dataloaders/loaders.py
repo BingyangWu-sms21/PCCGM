@@ -139,22 +139,29 @@ class BurgersLoader(pl.LightningDataModule):
 
 
 class RVEDataset(Dataset):
-    def __init__(self, path, idx_list, moduli_mean, moduli_std):
+    def __init__(self, path, idx_list, moduli_mean, moduli_std, fourier=False):
         self.root = path
         self.idx_list = idx_list
         self.moduli_mean = moduli_mean
         self.moduli_std = moduli_std
+        self.fourier = fourier
 
     def __len__(self):
         return len(self.idx_list)
 
     def __getitem__(self, idx):
-        rve = torch.from_numpy(
-            np.load(osp.join(self.root, "rves", f"rve_{self.idx_list[idx]}.npy"))).float()
-        rve = rve.unsqueeze(0)  # shape (1, 64, 64)
+        if self.fourier:
+            # Shape (2, 64, 64)
+            rve = np.load(osp.join(self.root, "rves_fourier", f"rve_{self.idx_list[idx]}.npy"))
+        else:
+            # Shape (64, 64) -> (1, 64, 64)
+            rve = np.load(osp.join(self.root, "rves", f"rve_{self.idx_list[idx]}.npy"))
+            rve = np.expand_dims(rve, axis=0)
+
         moduli_raw = np.load(osp.join(self.root, "moduli", f"moduli_{self.idx_list[idx]}.npy"))
         moduli_raw = moduli_raw.reshape(-1)
         moduli = (moduli_raw - self.moduli_mean) / self.moduli_std  # shape (9,)
+        rve = torch.from_numpy(rve).float()
         moduli = torch.from_numpy(moduli).float()
         moduli_raw = torch.from_numpy(moduli_raw).float()
 
@@ -163,7 +170,7 @@ class RVEDataset(Dataset):
 
 class RVELoader(pl.LightningDataModule):
     def __init__(self, data_dir, total_samples, train_samples, val_samples=0,
-                 test_samples=0, batch_size=32, num_workers=8):
+                 test_samples=0, batch_size=32, num_workers=8, fourier=False):
         super().__init__()
         self.data_dir = data_dir
         self.total_samples = total_samples
@@ -173,19 +180,22 @@ class RVELoader(pl.LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.moduli_mean, self.moduli_std = self._compute_moduli_mean_std()
+        self.fourier = fourier
+        if self.fourier:
+            self._compute_fourier_transform()
 
     def setup(self, stage: str):
         if stage == "fit":
             self.train_dataset = RVEDataset(self.data_dir, list(range(self.train_samples)),
-                                            self.moduli_mean, self.moduli_std)
+                                            self.moduli_mean, self.moduli_std, self.fourier)
             self.val_dataset = RVEDataset(
                 self.data_dir, list(range(self.train_samples, self.train_samples + self.val_samples)),
-                self.moduli_mean, self.moduli_std)
+                self.moduli_mean, self.moduli_std, self.fourier)
         elif stage == "test":
             self.test_dataset = RVEDataset(
                 self.data_dir, list(range(self.total_samples - self.test_samples,
                                           self.total_samples)),
-                self.moduli_mean, self.moduli_std)
+                self.moduli_mean, self.moduli_std, self.fourier)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size,
@@ -209,3 +219,16 @@ class RVELoader(pl.LightningDataModule):
         moduli_std = np.std(moduli, axis=0).reshape(-1)  # shape (3, 3) -> (9,)
 
         return moduli_mean, moduli_std
+
+    def _compute_fourier_transform(self):
+        r"""Compute the Fourier transform of the RVEs in the dataset"""
+        os.makedirs(osp.join(self.data_dir, "rves_fourier"), exist_ok=True)
+        for idx in range(self.total_samples):
+            filename = osp.join(self.data_dir, "rves_fourier", f"rve_{idx}.npy")
+            if osp.exists(filename):
+                continue
+            rve = np.load(osp.join(self.data_dir, "rves", f"rve_{idx}.npy"))
+            rve_freq = np.fft.fft2(rve)
+            # transform to real and imaginary parts
+            # shape (2, 64, 64)
+            np.save(filename, np.stack([rve_freq.real, rve_freq.imag], axis=0))
