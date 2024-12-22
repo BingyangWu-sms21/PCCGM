@@ -35,7 +35,7 @@ def zero_module(module):
 
 class ResidualConvBlock(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, is_res: bool = False
+        self, in_channels: int, out_channels: int, is_res: bool = False, padding_mode: str = 'zeros'
     ) -> None:
         super().__init__()
         '''
@@ -44,12 +44,12 @@ class ResidualConvBlock(nn.Module):
         self.same_channels = in_channels==out_channels
         self.is_res = is_res
         self.conv1 = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 3, 1, 1),
+            nn.Conv2d(in_channels, out_channels, 3, 1, 1, padding_mode=padding_mode),
             nn.BatchNorm2d(out_channels),
             nn.GELU(),
         )
         self.conv2 = nn.Sequential(
-            nn.Conv2d(out_channels, out_channels, 3, 1, 1),
+            nn.Conv2d(out_channels, out_channels, 3, 1, 1, padding_mode=padding_mode),
             nn.BatchNorm2d(out_channels),
             nn.GELU(),
         )
@@ -71,12 +71,12 @@ class ResidualConvBlock(nn.Module):
 
 
 class UnetDown(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, padding_mode='zeros'):
         super(UnetDown, self).__init__()
         '''
         process and downscale the image feature maps
         '''
-        layers = [ResidualConvBlock(in_channels, out_channels), nn.MaxPool2d(2)]
+        layers = [ResidualConvBlock(in_channels, out_channels, padding_mode=padding_mode), nn.MaxPool2d(2)]
         self.model = nn.Sequential(*layers)
 
     def forward(self, x):
@@ -84,15 +84,15 @@ class UnetDown(nn.Module):
 
 
 class UnetUp(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, padding_mode='zeros'):
         super(UnetUp, self).__init__()
         '''
         process and upscale the image feature maps
         '''
         layers = [
             nn.ConvTranspose2d(in_channels, out_channels, 2, 2),
-            ResidualConvBlock(out_channels, out_channels),
-            ResidualConvBlock(out_channels, out_channels),
+            ResidualConvBlock(out_channels, out_channels, padding_mode=padding_mode),
+            ResidualConvBlock(out_channels, out_channels, padding_mode=padding_mode),
         ]
         self.model = nn.Sequential(*layers)
 
@@ -121,7 +121,7 @@ class EmbedFC(nn.Module):
         return self.model(x)
 
 class CondVec2Img(nn.Module):
-    def __init__(self, cond_size, data_size, channels):
+    def __init__(self, cond_size, data_size, channels, padding_mode='zeros'):
         super(CondVec2Img, self).__init__()
         '''
         encode vector of size cond_size to data_size x data_size
@@ -135,7 +135,7 @@ class CondVec2Img(nn.Module):
         self.fc1 = nn.Linear(cond_size, cond_size)
         self.fc2 = nn.Linear(cond_size, cond_size)
         self.fc3 = nn.Linear(cond_size, data_size**2)
-        self.conv1 = nn.Conv2d(1, channels, 3, padding=1)
+        self.conv1 = nn.Conv2d(1, channels, 3, padding=1, padding_mode=padding_mode)
 
     def forward(self, x):
         # print(f"Shape before fc1: {x.shape}")  # 打印 fc1 之前的形状
@@ -149,7 +149,7 @@ class CondVec2Img(nn.Module):
 
 
 class UNET1(nn.Module):
-    def __init__(self, in_channels, n_feat = 256, pool_size=4, data_size=64, cond_size=16, controlnet=None):
+    def __init__(self, in_channels, n_feat = 256, pool_size=4, data_size=64, cond_size=16, controlnet=None, padding_mode='zeros'):
         super(UNET1, self).__init__()
 
         if controlnet is None:
@@ -162,21 +162,22 @@ class UNET1(nn.Module):
         self.data_size = data_size
         self.cond_size = cond_size
 
-        self.init_conv = ResidualConvBlock(in_channels, n_feat, is_res=True)
+        self.init_conv = ResidualConvBlock(in_channels, n_feat, is_res=True, padding_mode=padding_mode)
 
-        self.down1 = UnetDown(n_feat, n_feat)
-        self.down2 = UnetDown(n_feat, 2 * n_feat)
+        self.down1 = UnetDown(n_feat, n_feat, padding_mode=padding_mode)
+        self.down2 = UnetDown(n_feat, 2 * n_feat, padding_mode=padding_mode)
 
         self.to_vec = nn.Sequential(nn.AvgPool2d(pool_size), nn.GELU())
 
         if self.controlnet:
+            controlnet.condition_encoder.padding_mode = padding_mode
             self.control_condition_encoder = instantiate_from_config(controlnet.condition_encoder) #CondVec2Img(cond_size, data_size, in_channels)
             self.zero_conv0 = zero_module(nn.Conv2d(in_channels, in_channels, 1))
-            self.control_init_conv = ResidualConvBlock(in_channels, n_feat, is_res=True)
+            self.control_init_conv = ResidualConvBlock(in_channels, n_feat, is_res=True, padding_mode=padding_mode)
             self.zero_conv1 = zero_module(nn.Conv2d(n_feat, n_feat, 1))
-            self.control_down1 = UnetDown(n_feat, n_feat)
+            self.control_down1 = UnetDown(n_feat, n_feat, padding_mode=padding_mode)
             self.zero_conv2 = zero_module(nn.Conv2d(n_feat, n_feat, 1))
-            self.control_down2 = UnetDown(n_feat, 2*n_feat)
+            self.control_down2 = UnetDown(n_feat, 2*n_feat, padding_mode=padding_mode)
             self.zero_conv3 = zero_module(nn.Conv2d(2*n_feat, 2*n_feat, 1))
 
         self.timeembed1 = EmbedFC(1, 2*n_feat)
@@ -191,13 +192,13 @@ class UNET1(nn.Module):
             nn.ReLU(),
         )
 
-        self.up1 = UnetUp(4 * n_feat, n_feat)
-        self.up2 = UnetUp(2 * n_feat, n_feat)
+        self.up1 = UnetUp(4 * n_feat, n_feat, padding_mode=padding_mode)
+        self.up2 = UnetUp(2 * n_feat, n_feat, padding_mode=padding_mode)
         self.out = nn.Sequential(
-            nn.Conv2d(2 * n_feat, n_feat, 3, 1, 1),
+            nn.Conv2d(2 * n_feat, n_feat, 3, 1, 1, padding_mode=padding_mode),
             nn.GroupNorm(8, n_feat),
             nn.ReLU(),
-            nn.Conv2d(n_feat, self.in_channels, 3, 1, 1),
+            nn.Conv2d(n_feat, self.in_channels, 3, 1, 1, padding_mode=padding_mode),
         )
 
     def forward(self, x, c, t, context_mask):
@@ -248,4 +249,3 @@ class UNET1(nn.Module):
             up3 = self.up2(cemb2*up2 + temb2, down1)
             out = self.out(torch.cat((up3, initconv), 1))
         return out
-
