@@ -25,6 +25,7 @@ def get_parser():
     parser.add_argument('--seed', type=int, default=101, help='global seed for reproducibility')
     parser.add_argument('--resume', '-r', type=str, default="", help='resume from logdir or log file')
     parser.add_argument('--unet_weights', type=str, help="load unet weights only from *.pth file")
+    parser.add_argument('--image_logger_disable', action='store_true', help='disable image logger')
     return parser
 
 def main():
@@ -104,6 +105,8 @@ def main():
             "target": "loggers.CUDACallback"
         },
     }
+    if known.image_logger_disable:
+        del callbacks_cfg["image_logger"]
 
     checkpoint_callback_0 = ModelCheckpoint(dirpath=osp.join(ckptdir), every_n_epochs=lightning_config.save_every_n_epochs, save_on_train_epoch_end=True, filename="last")
     checkpoint_callback_1 = ModelCheckpoint(dirpath=osp.join(ckptdir), save_top_k=5, monitor="train/loss_epoch")
@@ -129,6 +132,8 @@ def main():
                       devices=len(gpus),
                       precision=trainer_config.precision,
                       gradient_clip_val=trainer_config.get("gradient_clip_val", 0),
+                      val_check_interval=trainer_config.get("val_check_interval", None),
+                      inference_mode=trainer_config.get("inference_mode", True),
                       default_root_dir=logdir,
                       **trainer_kwargs)
 
@@ -159,6 +164,9 @@ def main():
         trainer.fit(model, dataloader, ckpt_path=known.resume_from_checkpoint)
     else:
         trainer.fit(model, dataloader)
+
+    if lightning_config.get("test", False):
+        trainer.test(model, dataloader)
 
 if __name__ == "__main__":
     main()

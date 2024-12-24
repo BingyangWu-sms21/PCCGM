@@ -222,8 +222,6 @@ class DiffusionSDERVE(pl.LightningModule):
         # to the same value as fourier
         residual_config.params.fourier = fourier
         regularize_config.params.fourier = fourier
-        print(residual_config)
-        print(regularize_config)
         self.residual = instantiate_from_config(residual_config)
         self.regularize = instantiate_from_config(regularize_config)
         self.eps = eps
@@ -305,7 +303,9 @@ class DiffusionSDERVE(pl.LightningModule):
         return loss
 
     def get_input(self, batch):
-        x, c, c_raw = batch
+        x = batch["input"]
+        c = batch["label"]
+        c_raw = batch["label_raw"]
         return x, c, c_raw
 
     @torch.no_grad()

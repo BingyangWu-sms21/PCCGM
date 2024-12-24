@@ -35,6 +35,9 @@ def parse_args():
                         help="List of Young's moduli and Poisson's ratios of matrix "
                         "and inclusion. The order is E_matrix, nu_matrix, E_inclusion, "
                         "nu_inclusion.")
+    parser.add_argument("--save_grad", action="store_true",
+                        help="Save the gradient of the effective properties with "
+                        "respect to the input RVE.")
     return parser.parse_args()
 
 
@@ -53,10 +56,12 @@ def create_output_dirs(args):
     os.makedirs(os.path.join(out_dir, "rves"), exist_ok=True)
     os.makedirs(os.path.join(out_dir, "moduli"), exist_ok=True)
     os.makedirs(os.path.join(out_dir, "imgs"), exist_ok=True)
+    if args.save_grad:
+        os.makedirs(os.path.join(out_dir, "grads"), exist_ok=True)
     return out_dir
 
 
-def compute_effective_properties(i, out_dir, properties, solver):
+def compute_effective_properties(i, out_dir, properties, solver, save_grad=False):
     rve_filename = os.path.join(out_dir, "rves", f"rve_{i}.npy")
     moduli_filename = os.path.join(out_dir, "moduli", f"moduli_{i}.npy")
     if not os.path.exists(rve_filename):
@@ -75,7 +80,23 @@ def compute_effective_properties(i, out_dir, properties, solver):
         _, moduli = solver.run_and_process(lmbda, mu)
     except Exception as e:
         print(f"Failed to compute effective properties for RVE {i}. Error: {e}")
+    moduli = moduli.squeeze(0)
     np.save(moduli_filename, moduli.detach().numpy())
+    if save_grad:
+        grad_filename = os.path.join(out_dir, "grads", f"grad_{i}.npy")
+        grad_tensor = torch.zeros(moduli.shape + rve.shape)  # (3, 3, *resolution)
+        for i in range(moduli.shape[0]):
+            for j in range(moduli.shape[1]):
+                moduli[i, j].backward(retain_graph=True)
+                grad_tensor[i, j] = rve.grad
+                rve.grad.zero_()
+        np.save(grad_filename, grad_tensor.detach().numpy())
+        if i < 100:
+            plt.imshow(grad_tensor[0, 0], cmap="gray")
+            plt.axis("off")
+            grad_img_filename = os.path.join(out_dir, "imgs", f"grad_{i}.png")
+            plt.savefig(grad_img_filename, bbox_inches="tight", pad_inches=0)
+            plt.close()
 
 
 def main():
@@ -106,7 +127,8 @@ def main():
             npy_filename = os.path.join(out_dir, "rves", f"rve_{current_samples}.npy")
             np.save(npy_filename, bitmap)
             try:
-                compute_effective_properties(current_samples, out_dir, args.properties, solver)
+                compute_effective_properties(current_samples, out_dir, args.properties, solver,
+                                             save_grad=args.save_grad)
                 current_samples += 1
                 if current_samples % max(10, (args.samples // 100)) == 0:
                     print(f"Generated {current_samples} / {args.samples} samples")

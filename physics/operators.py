@@ -8,6 +8,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from data_generation.rve.fem_solver import PeriodicBCRVE2D
+from utils import instantiate_from_config
 
 class DarcyFlow(nn.Module):
     def __init__(self, dx, eps, mu_p, sigma_p, mu_k, sigma_k):
@@ -333,6 +334,56 @@ class RVE(nn.Module):
                 print("Error in RVE forward: ", e)
         moduli = moduli.reshape(-1, 9)
         error = moduli - moduli_gt
+        return error
+
+
+class RVESurrogate(torch.autograd.Function):
+    r"""Compute the RVE problem using a surrogate model. The
+    surrogate model is a pre-trained neural network that predicts the moduli
+    and the gradient of the moduli with respect to the RVE field.
+    """
+
+    @staticmethod
+    def forward(ctx, x, model):
+        # Shape of x: [b, in_channels, *n_cells]
+        fval, grad = model(x)  # Shape [b, out_dim], [b, out_dim*in_channels, *n_cells]
+        ctx.save_for_backward(grad, x)
+        return fval
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        grad, x = ctx.saved_tensors
+        in_channels = x.shape[1]
+        out_dim = grad_output.shape[1]
+        grad = grad.view(-1, out_dim, in_channels, *x.shape[2:])  # Shape [b, out_dim, in_channels, *n_cells]
+        grad_output = grad_output.unsqueeze(-1).unsqueeze(-1).unsqueeze(-1)  # Shape [b, out_dim, 1, 1, 1]
+        grad_input = grad * grad_output  # Shape [b, out_dim, in_channels, *n_cells]
+        grad_input = grad_input.sum(dim=1)  # Shape [b, in_channels, *n_cells]
+        return grad_input, None
+
+
+class RVESurrogateResidual(nn.Module):
+    r"""Compute the residual of the RVE problem using a surrogate model. The
+    surrogate model is a pre-trained neural network that predicts the moduli
+    and the gradient of the moduli with respect to the RVE field.
+    """
+
+    def __init__(self, model_config):
+        super().__init__()
+        self.model = instantiate_from_config(model_config)
+
+    def forward(self, x, moduli_gt):
+        r"""Compute the residual of the RVE problem
+
+        Args:
+            x (torch.Tensor): The RVE field. Shape (b, 1, *n_cells)
+            moduli_gt (torch.Tensor): The ground truth moduli. Shape (b, 9)
+
+        Returns:
+            torch.Tensor: The residual. Shape (b, 9)
+        """
+        moduli_pred = RVESurrogate.apply(x, self.model)
+        error = moduli_pred - moduli_gt
         return error
 
 

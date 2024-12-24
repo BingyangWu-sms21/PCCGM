@@ -139,12 +139,15 @@ class BurgersLoader(pl.LightningDataModule):
 
 
 class RVEDataset(Dataset):
-    def __init__(self, path, idx_list, moduli_mean, moduli_std, fourier=False):
+    def __init__(self, path, idx_list, moduli_mean, moduli_std, fourier=False, grad=False):
         self.root = path
         self.idx_list = idx_list
         self.moduli_mean = moduli_mean
         self.moduli_std = moduli_std
         self.fourier = fourier
+        self.grad = grad
+        if self.fourier and self.grad:
+            raise ValueError("Fourier and grad cannot be used together")
 
     def __len__(self):
         return len(self.idx_list)
@@ -161,16 +164,24 @@ class RVEDataset(Dataset):
         moduli_raw = np.load(osp.join(self.root, "moduli", f"moduli_{self.idx_list[idx]}.npy"))
         moduli_raw = moduli_raw.reshape(-1)
         moduli = (moduli_raw - self.moduli_mean) / self.moduli_std  # shape (9,)
+        grad_raw = np.load(osp.join(self.root, "grads", f"grad_{self.idx_list[idx]}.npy"))  # shape (3, 3, 64, 64)
+        grad_raw = grad_raw.reshape(-1, 64, 64)  # shape (9, 64, 64)
+        grad = (grad_raw - self.moduli_mean[:, None, None]) / self.moduli_std[:, None, None]  # shape (9, 64, 64)
         rve = torch.from_numpy(rve).float()
         moduli = torch.from_numpy(moduli).float()
         moduli_raw = torch.from_numpy(moduli_raw).float()
+        grad = torch.from_numpy(grad).float()
+        grad_raw = torch.from_numpy(grad_raw).float()
+        out_dict = {"input": rve, "label": moduli, "label_raw": moduli_raw,
+                    "grad": grad, "grad_raw": grad_raw}
 
-        return rve, moduli, moduli_raw
+        return out_dict
 
 
 class RVELoader(pl.LightningDataModule):
     def __init__(self, data_dir, total_samples, train_samples, val_samples=0,
-                 test_samples=0, batch_size=32, num_workers=8, fourier=False):
+                 test_samples=0, batch_size=32, num_workers=8, fourier=False,
+                 grad=False):
         super().__init__()
         self.data_dir = data_dir
         self.total_samples = total_samples
@@ -181,21 +192,20 @@ class RVELoader(pl.LightningDataModule):
         self.num_workers = num_workers
         self.moduli_mean, self.moduli_std = self._compute_moduli_mean_std()
         self.fourier = fourier
+        self.grad = grad
         if self.fourier:
             self._compute_fourier_transform()
 
-    def setup(self, stage: str):
-        if stage == "fit":
-            self.train_dataset = RVEDataset(self.data_dir, list(range(self.train_samples)),
-                                            self.moduli_mean, self.moduli_std, self.fourier)
-            self.val_dataset = RVEDataset(
-                self.data_dir, list(range(self.train_samples, self.train_samples + self.val_samples)),
-                self.moduli_mean, self.moduli_std, self.fourier)
-        elif stage == "test":
-            self.test_dataset = RVEDataset(
-                self.data_dir, list(range(self.total_samples - self.test_samples,
-                                          self.total_samples)),
-                self.moduli_mean, self.moduli_std, self.fourier)
+    def setup(self, stage=None):
+        self.train_dataset = RVEDataset(self.data_dir, list(range(self.train_samples)),
+                                        self.moduli_mean, self.moduli_std, self.fourier, self.grad)
+        self.val_dataset = RVEDataset(
+            self.data_dir, list(range(self.train_samples, self.train_samples + self.val_samples)),
+            self.moduli_mean, self.moduli_std, self.fourier, self.grad)
+        self.test_dataset = RVEDataset(
+            self.data_dir, list(range(self.total_samples - self.test_samples,
+                                        self.total_samples)),
+            self.moduli_mean, self.moduli_std, self.fourier, self.grad)
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size,

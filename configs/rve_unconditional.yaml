@@ -1,11 +1,11 @@
 model:
   target: models.score_matching.DiffusionSDERVE
   params:
-    lr: 1e-4
+    lr: 1e-3
     optimizer_type: "adam"  # ["adam", "adamw"]
-    scheduler_type: "cos-warm"  # ["cos", "cos-warm", "mstep", "exp", "none"]
+    scheduler_type: "exp"  # ["cos", "cos-warm", "mstep", "exp", "none"]
     milestones: [300, 800]  # only for mstep
-    gamma: 0.5  # decay factor for mstep and exp
+    gamma: 0.9  # decay factor for mstep and exp
     residual_enable: False
     regularize_enable: False
     fourier: False
@@ -17,6 +17,7 @@ model:
         pool_size: 4
         data_size: 64
         cond_size: 9
+        padding_mode: "circular"
         controlnet:
           use: False
           condition_encoder:
@@ -50,7 +51,7 @@ data:
   target: dataloaders.loaders.RVELoader
   params:
     data_dir: ../data/rve/domain_1.00x1.00_res_64x64_r_0.090-0.160_frac_0.05-0.80_keep_last_True_Em_71.00_nu_m_0.33_Ei_400.00_nu_i_0.25_seed_0
-    batch_size: 32
+    batch_size: 64
     num_workers: 8
     total_samples: 10000
     train_samples: 5000
@@ -65,7 +66,7 @@ lightning:
     strategy: ddp
     devices: 0,1
     precision: 16-mixed
-    gradient_clip_val: 1.
+    gradient_clip_val: 0.
   epochs: 2000
   save_every_n_epochs: 5
   sample_every_n_steps: 2000
